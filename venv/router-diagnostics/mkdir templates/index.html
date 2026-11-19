@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Router Diagnostics | Network Security Unit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night: #0a1228;
+    --navy: #0f1d3f;
+    --navy-2: #172a57;
+    --navy-line: #2b427a;
+    --gold: #c9a227;
+    --gold-soft: #e6c866;
+    --siren-red: #d62839;
+    --siren-blue: #2f6bff;
+    --paper: #e9edf5;
+    --panel: #ffffff;
+    --ink: #0d1730;
+    --muted: #5a6788;
+    --line: #ccd4e6;
+    --ok: #1f6bd1;
+    --term-bg: #070d1c;
+    --term-ink: #bcd0f5;
+    --display: "Barlow Condensed", "Arial Narrow", Impact, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    display: grid; grid-template-columns: 350px 1fr;
+    padding-top: 8px;
+  }
+  :focus-visible { outline: 3px solid var(--gold-soft); outline-offset: 2px; }
+
+  /* ---------- siren bar ---------- */
+  .siren {
+    position: fixed; top: 0; left: 0; right: 0; height: 8px; z-index: 50;
+    display: grid; grid-template-columns: 1fr 1fr;
+  }
+  .siren i { display: block; opacity: .35; }
+  .siren i:first-child { background: var(--siren-red); }
+  .siren i:last-child { background: var(--siren-blue); }
+  body.scanning .siren i:first-child { animation: flashA .8s steps(1) infinite; }
+  body.scanning .siren i:last-child { animation: flashB .8s steps(1) infinite; }
+  @keyframes flashA { 0% { opacity: 1; } 50% { opacity: .2; } }
+  @keyframes flashB { 0% { opacity: .2; } 50% { opacity: 1; } }
+
+  /* ---------- left rail ---------- */
+  aside {
+    background: linear-gradient(180deg, var(--night), var(--navy));
+    color: #e9eefc; padding: 28px 26px; display: flex; flex-direction: column;
+    gap: 24px; min-height: calc(100vh - 8px); border-right: 3px solid var(--gold);
+  }
+  .brand { display: flex; gap: 14px; align-items: center; }
+  .badge { width: 54px; height: 62px; flex: none; }
+  aside h1 {
+    font: 700 31px/1 var(--display); margin: 0 0 4px; letter-spacing: .02em;
+    text-transform: uppercase;
+  }
+  aside .sub { margin: 0; color: #9fb0d8; font-size: 13px; line-height: 1.35; }
+
+  fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; }
+  legend {
+    font: 600 17px var(--display); letter-spacing: .06em; color: var(--gold-soft);
+    padding: 0 0 8px; margin: 0; width: 100%; border-bottom: 1px solid var(--navy-line);
+    margin-bottom: 12px;
+  }
+  label { display: grid; gap: 4px; font-size: 13px; color: #b4c2e4; }
+  input[type=text], input[type=password], input[type=number] {
+    width: 100%; background: var(--night); color: #fff; border: 1px solid var(--navy-line);
+    border-radius: 4px; padding: 9px 11px; font: 400 14px var(--mono);
+  }
+  input::placeholder { color: #5f729f; }
+  .row { display: grid; grid-template-columns: 1fr 96px; gap: 10px; }
+  .cmds { display: grid; gap: 8px; }
+  .cmd {
+    display: flex; align-items: center; gap: 10px; cursor: pointer;
+    background: var(--navy-2); border: 1px solid var(--navy-line); border-radius: 4px;
+    padding: 9px 11px; font: 400 13px var(--mono); color: #eef2ff;
+  }
+  .cmd:has(input:checked) { border-color: var(--gold); }
+  .cmd input { accent-color: var(--gold); width: 16px; height: 16px; margin: 0; }
+  .add { display: flex; gap: 8px; }
+  .add button {
+    background: transparent; color: var(--gold-soft); border: 1px dashed var(--gold);
+    border-radius: 4px; padding: 0 14px; cursor: pointer; font-size: 18px;
+  }
+  .add button:hover { background: rgba(201,162,39,.15); }
+  details.creds summary { cursor: pointer; color: #9fb0d8; font-size: 13px; }
+  details.creds fieldset { margin-top: 12px; }
+
+  #run {
+    margin-top: auto; background: var(--gold); color: #1a1500; border: 0;
+    border-radius: 4px; padding: 14px; font: 700 20px var(--display);
+    letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
+    transition: background .15s;
+  }
+  #run:hover { background: var(--gold-soft); }
+  #run:disabled { background: #4a5575; color: #c3cbe0; cursor: progress; }
+  #status { margin: 10px 0 0; text-align: center; font-size: 13px; color: #9fb0d8; min-height: 20px; }
+
+  /* ---------- results ---------- */
+  main { padding: 30px clamp(20px, 4vw, 56px); max-width: 1020px; width: 100%; }
+  .head {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 3px solid var(--navy);
+  }
+  .head h2 { font: 700 30px var(--display); margin: 0; letter-spacing: .03em; text-transform: uppercase; }
+  .tools { display: flex; gap: 8px; }
+  .tools button {
+    background: var(--panel); border: 1px solid var(--navy-line); color: var(--navy);
+    border-radius: 4px; padding: 6px 13px; font: 600 13px var(--body); cursor: pointer;
+  }
+  .tools button:hover { background: var(--navy); color: #fff; }
+  .tools button:disabled { opacity: .4; cursor: default; background: var(--panel); color: var(--navy); }
+
+  #results { display: grid; gap: 12px; }
+  .empty {
+    border: 2px dashed var(--navy-line); border-radius: 6px; padding: 38px 24px;
+    color: var(--muted); text-align: center; background: rgba(255,255,255,.5);
+  }
+  .error {
+    background: #fde6e8; border: 1px solid #eca4ab; border-left: 6px solid var(--siren-red);
+    color: #701621; border-radius: 6px; padding: 16px 18px;
+  }
+
+  details.res {
+    background: var(--panel); border: 1px solid var(--line);
+    border-left: 7px solid var(--ok); border-radius: 6px; overflow: hidden;
+  }
+  details.res.fail { border-left-color: var(--siren-red); }
+  details.res.wait { border-left-color: var(--gold); }
+  details.res summary {
+    list-style: none; cursor: pointer; padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px; font: 500 14px var(--mono);
+  }
+  details.res summary::-webkit-details-marker { display: none; }
+  details.res summary::before {
+    content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted);
+    border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .15s;
+  }
+  details.res[open] summary::before { transform: rotate(45deg); }
+  .name { flex: 1; }
+  .meta { color: var(--muted); font-size: 12px; font-family: var(--body); }
+  .tag {
+    font: 700 12px var(--display); letter-spacing: .08em; text-transform: uppercase;
+    padding: 2px 9px; border-radius: 3px; background: #e0ebff; color: #123d86;
+  }
+  .fail .tag { background: #fde1e4; color: #8d1422; }
+  .copy {
+    background: transparent; border: 1px solid var(--line); border-radius: 4px;
+    padding: 3px 9px; font: 500 12px var(--body); color: var(--muted); cursor: pointer;
+  }
+  .copy:hover { color: var(--navy); border-color: var(--navy); }
+  pre {
+    margin: 0; padding: 16px 18px; background: var(--term-bg); color: var(--term-ink);
+    font: 400 13px/1.55 var(--mono); max-height: 520px; overflow: auto; white-space: pre;
+    border-top: 2px solid var(--gold);
+  }
+  .wait .name::after { content: " in progress"; color: #8a6d00; font-family: var(--body); }
+
+  @media (max-width: 820px) {
+    body { grid-template-columns: 1fr; }
+    aside { min-height: 0; border-right: 0; border-bottom: 3px solid var(--gold); }
+    #run { margin-top: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body.scanning .siren i { animation: none; opacity: 1; }
+    details.res summary::before { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="siren" aria-hidden="true"><i></i><i></i></div>
+
+<aside>
+  <div class="brand">
+    <svg class="badge" viewBox="0 0 54 62" aria-hidden="true">
+      <path d="M27 2 L50 10 V30 C50 44 40 54 27 60 C14 54 4 44 4 30 V10 Z" fill="#c9a227" stroke="#e6c866" stroke-width="2"/>
+      <path d="M27 9 L44 15 V30 C44 40 37 48 27 53 C17 48 10 40 10 30 V15 Z" fill="#0f1d3f"/>
+      <path d="M27 18 L29.8 25 L37 25.6 L31.5 30.4 L33.3 37.5 L27 33.6 L20.7 37.5 L22.5 30.4 L17 25.6 L24.2 25 Z" fill="#e6c866"/>
+    </svg>
+    <div>
+      <h1>Router diagnostics</h1>
+      <p class="sub">Network Security Unit. Cisco router in the EVE-NG lab.</p>
+    </div>
+  </div>
+
+  <fieldset>
+    <legend>Target device</legend>
+    <div class="row">
+      <label>Address <input id="host" type="text" value="{{ host }}" autocomplete="off"></label>
+      <label>Port <input id="port" type="number" value="{{ port }}" min="1" max="65535"></label>
+    </div>
+    <details class="creds">
+      <summary>Access credentials (if the router asks)</summary>
+      <fieldset>
+        <label>Username <input id="username" type="text" autocomplete="off"></label>
+        <label>Password <input id="password" type="password" autocomplete="off"></label>
+        <label>Enable password <input id="enable" type="password" autocomplete="off"></label>
+      </fieldset>
+    </details>
+  </fieldset>
+
+  <fieldset>
+    <legend>Checks to run</legend>
+    <div class="cmds" id="cmds">
+      {% for c in commands %}
+      <label class="cmd"><input type="checkbox" value="{{ c }}" checked> {{ c }}</label>
+      {% endfor %}
+    </div>
+    <div class="add">
+      <input id="custom" type="text" placeholder="show ip route">
+      <button type="button" id="addBtn" aria-label="Add command">+</button>
+    </div>
+  </fieldset>
+
+  <div>
+    <button id="run" type="button" style="width:100%">Run diagnostics</button>
+    <p id="status" role="status"></p>
+  </div>
+</aside>
+
+<main>
+  <div class="head">
+    <h2>Evidence log</h2>
+    <div class="tools">
+      <button id="toggleAll" disabled>Expand all</button>
+      <button id="download" disabled>Save report</button>
+    </div>
+  </div>
+  <div id="results">
+    <div class="empty">No checks run yet. Choose your checks and select <strong>Run diagnostics</strong>.</div>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const results = $("results"), statusEl = $("status"), runBtn = $("run");
+let last = [];
+
+function selected() {
+  return [...document.querySelectorAll("#cmds input:checked")].map(i => i.value);
+}
+
+$("addBtn").onclick = addCustom;
+$("custom").addEventListener("keydown", e => { if (e.key === "Enter") addCustom(); });
+function addCustom() {
+  const v = $("custom").value.trim();
+  if (!v) return;
+  if (!v.toLowerCase().startsWith("show ")) { statusEl.textContent = "Only show commands are allowed."; return; }
+  const l = document.createElement("label");
+  l.className = "cmd";
+  const cb = document.createElement("input");
+  cb.type = "checkbox"; cb.value = v; cb.checked = true;
+  l.append(cb, " " + v);
+  $("cmds").append(l);
+  $("custom").value = "";
+  statusEl.textContent = "";
+}
+
+function card(r, open) {
+  const d = document.createElement("details");
+  d.className = "res" + (r.ok === false ? " fail" : "") + (r.wait ? " wait" : "");
+  if (open) d.open = true;
+  const s = document.createElement("summary");
+  const name = document.createElement("span"); name.className = "name"; name.textContent = r.command;
+  s.append(name);
+  if (!r.wait) {
+    const tag = document.createElement("span"); tag.className = "tag";
+    tag.textContent = r.ok ? "Completed" : "Failed";
+    const m = document.createElement("span"); m.className = "meta";
+    m.textContent = r.seconds + "s";
+    const c = document.createElement("button"); c.className = "copy"; c.textContent = "Copy";
+    c.onclick = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      navigator.clipboard.writeText(r.output).then(() => {
+        c.textContent = "Copied"; setTimeout(() => c.textContent = "Copy", 1200);
+      });
+    };
+    s.append(tag, m, c);
+    const pre = document.createElement("pre"); pre.textContent = r.output || "(no output)";
+    d.append(s, pre);
+  } else {
+    d.append(s);
+  }
+  return d;
+}
+
+runBtn.onclick = async () => {
+  const commands = selected();
+  if (!commands.length) { statusEl.textContent = "Pick at least one check."; return; }
+
+  runBtn.disabled = true; runBtn.textContent = "Running…";
+  document.body.classList.add("scanning");
+  statusEl.textContent = "Connecting to the router…";
+  results.replaceChildren(...commands.map(c => card({ command: c, wait: true })));
+  $("toggleAll").disabled = $("download").disabled = true;
+
+  try {
+    const res = await fetch("/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        host: $("host").value, port: $("port").value, commands,
+        username: $("username").value, password: $("password").value, enable: $("enable").value
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Request failed.");
+    last = data.results;
+    results.replaceChildren(...last.map(r => card(r, false)));
+    const ok = last.filter(r => r.ok).length;
+    statusEl.textContent = `${ok} of ${last.length} checks completed`;
+    $("toggleAll").disabled = $("download").disabled = false;
+  } catch (err) {
+    const e = document.createElement("div");
+    e.className = "error"; e.textContent = err.message;
+    results.replaceChildren(e);
+    statusEl.textContent = "Run failed";
+  } finally {
+    runBtn.disabled = false; runBtn.textContent = "Run diagnostics";
+    document.body.classList.remove("scanning");
+  }
+};
+
+$("toggleAll").onclick = () => {
+  const items = [...results.querySelectorAll("details.res")];
+  const open = items.some(d => !d.open);
+  items.forEach(d => d.open = open);
+  $("toggleAll").textContent = open ? "Collapse all" : "Expand all";
+};
+
+$("download").onclick = () => {
+  const text = last.map(r => `===== ${r.command} =====\n${r.output}\n`).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+  a.download = "router-diagnostics-report.txt";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+</script>
+</body>
+</html>
